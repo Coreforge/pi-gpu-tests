@@ -45,16 +45,16 @@ int memcheck(void* ptr, char c, size_t n){
  *
  * addr needs to point to a block at least 256 bytes large
  */
-bool runInstrCheck(str16 strfun, void* addr, int imm_offset){
+bool runInstrCheck(str16 strfun, void* addr, int imm_offset, int dataSize){
 
     int offs = 3;
     int blkSize = 256;
     // some test data that makes it easy to spot errors
-    char* srcData = malloc(16);
+    char* srcData = malloc(dataSize);
 
     bool success = true;
 
-    for(int i = 0; i < 16; i++){
+    for(int i = 0; i < dataSize; i++){
         srcData[i]=i+1;
     }
 
@@ -63,12 +63,12 @@ bool runInstrCheck(str16 strfun, void* addr, int imm_offset){
 
     strfun(addr + offs, srcData, imm_offset);  // +3 to have it not aligned, +1 would work just as well, but this gives more space to spot overruns
 
-    if(safe_memcmp(addr + offs + imm_offset, srcData, 16)){
+    if(safe_memcmp(addr + offs + imm_offset, srcData, dataSize)){
         printf("Data mismatch!\n");
         printf("Source: \t");
-        dump(srcData, 16);
+        dump(srcData, dataSize);
         printf("\nDest: \t");
-        dump(addr + offs + imm_offset, 16);
+        dump(addr + offs + imm_offset, dataSize);
         printf("\n");
         success = false;
     }
@@ -81,9 +81,9 @@ bool runInstrCheck(str16 strfun, void* addr, int imm_offset){
         success = false;
     }
 
-    if(memcheck(addr+offs + 16 + imm_offset, 0xff, blkSize - offs - 16 - imm_offset)){
+    if(memcheck(addr+offs + dataSize + imm_offset, 0xff, blkSize - offs - dataSize - imm_offset)){
         printf("Overrun in after the actual range! Data is: \n");
-        dump(addr + 16 + offs, offs);
+        dump(addr + dataSize + offs, offs);
         printf("\n(should all be 0x%hhx)\n", 0xff);
         success = false;
     }
@@ -146,9 +146,9 @@ void stp4(void* dst, void* src, int offset){
     printf("128bit SIMD stp (0xad000440) total 256bit\n");
     asm volatile(
         "ldr x2, [%0]\n\t"  // dst address into x1
-        "ldp x6, x7, [%1]\n\t"  // load the data into the registers
-        "stp x6, x7, [x2]"  // the instruction actually being tested
-        : : "r"(&dst), "r"(src) : "x2", "x6", "x7");
+        "ldp q0, q1, [%1]\n\t"  // load the data into the registers
+        "stp q0, q1, [x2]"  // the instruction actually being tested
+        : : "r"(&dst), "r"(src) : "x2", "q0", "q1");
 }
 
 // 3c8041a0
@@ -171,6 +171,182 @@ void stur2(void* dst, void* src, int offset){
         "ldr q0, [%1]\n\t"  // load the data into the register
         "stur q0, [x7, #0xc]"  // the instruction actually being tested
         : : "r"(&newdst), "r"(src) : "x7", "q0");
+}
+
+// 3c810140
+void stur3(void* dst, void* src, int offset){
+    printf("128bit SIMD stur (0x3c810140)\n");
+    void* newdst = dst - 0x10; // to compensate the immediate offset
+    asm volatile(
+        "ldr x10, [%0]\n\t"  // newdst address into x13
+        "ldr q0, [%1]\n\t"  // load the data into the register
+        "stur q0, [x10, #0x10]"  // the instruction actually being tested
+        : : "r"(&newdst), "r"(src) : "x10", "q0");
+}
+
+// 3c820141
+void stur4(void* dst, void* src, int offset){
+    printf("128bit SIMD stur (0x3c820141)\n");
+    void* newdst = dst - 0x20; // to compensate the immediate offset
+    asm volatile(
+        "ldr x10, [%0]\n\t"  // newdst address into x13
+        "ldr q1, [%1]\n\t"  // load the data into the register
+        "stur q1, [x10, #0x20]"  // the instruction actually being tested
+        : : "r"(&newdst), "r"(src) : "x10", "q1");
+}
+
+// 3c830142
+void stur5(void* dst, void* src, int offset){
+    printf("128bit SIMD stur (0x3c830142)\n");
+    void* newdst = dst - 0x30; // to compensate the immediate offset
+    asm volatile(
+        "ldr x10, [%0]\n\t"  // newdst address into x13
+        "ldr q2, [%1]\n\t"  // load the data into the register
+        "stur q2, [x10, #0x30]"  // the instruction actually being tested
+        : : "r"(&newdst), "r"(src) : "x10", "q2");
+}
+
+// 3c840143
+void stur6(void* dst, void* src, int offset){
+    printf("128bit SIMD stur (0x3c840143)\n");
+    void* newdst = dst - 0x40; // to compensate the immediate offset
+    asm volatile(
+        "ldr x10, [%0]\n\t"  // newdst address into x13
+        "ldr q3, [%1]\n\t"  // load the data into the register
+        "stur q3, [x10, #0x40]"  // the instruction actually being tested
+        : : "r"(&newdst), "r"(src) : "x10", "q3");
+}
+
+// 3c810022
+void stur7(void* dst, void* src, int offset){
+    printf("128bit SIMD stur (0x3c810022)\n");
+    void* newdst = dst - 0x10; // to compensate the immediate offset
+    asm volatile(
+        "ldr x1, [%0]\n\t"  // newdst address into x13
+        "ldr q2, [%1]\n\t"  // load the data into the register
+        "stur q2, [x1, #0x10]"  // the instruction actually being tested
+        : : "r"(&newdst), "r"(src) : "x1", "q2");
+}
+
+// 3c820021
+void stur8(void* dst, void* src, int offset){
+    printf("128bit SIMD stur (0x3c820021)\n");
+    void* newdst = dst - 0x20; // to compensate the immediate offset
+    asm volatile(
+        "ldr x1, [%0]\n\t"  // newdst address into x13
+        "ldr q1, [%1]\n\t"  // load the data into the register
+        "stur q1, [x1, #0x20]"  // the instruction actually being tested
+        : : "r"(&newdst), "r"(src) : "x1", "q1");
+}
+
+// 3c830022
+void stur9(void* dst, void* src, int offset){
+    printf("128bit SIMD stur (0x3c830022)\n");
+    void* newdst = dst - 0x30; // to compensate the immediate offset
+    asm volatile(
+        "ldr x1, [%0]\n\t"  // newdst address into x13
+        "ldr q2, [%1]\n\t"  // load the data into the register
+        "stur q2, [x1, #0x30]"  // the instruction actually being tested
+        : : "r"(&newdst), "r"(src) : "x1", "q2");
+}
+
+// 3c80c026
+void stur10(void* dst, void* src, int offset){
+    printf("128bit SIMD stur (0x3c80c026)\n");
+    void* newdst = dst - 0xc; // to compensate the immediate offset
+    asm volatile(
+        "ldr x1, [%0]\n\t"  // newdst address into x13
+        "ldr q6, [%1]\n\t"  // load the data into the register
+        "stur q6, [x1, #0xc]"  // the instruction actually being tested
+        : : "r"(&newdst), "r"(src) : "x1", "q6");
+}
+
+// 3c818027
+void stur11(void* dst, void* src, int offset){
+    printf("128bit SIMD stur (0x3c818027)\n");
+    void* newdst = dst - 0x18; // to compensate the immediate offset
+    asm volatile(
+        "ldr x1, [%0]\n\t"  // newdst address into x13
+        "ldr q7, [%1]\n\t"  // load the data into the register
+        "stur q7, [x1, #0x18]"  // the instruction actually being tested
+        : : "r"(&newdst), "r"(src) : "x1", "q7");
+} 
+
+// 3c810021
+void stur12(void* dst, void* src, int offset){
+    printf("128bit SIMD stur (0x3c810021)\n");
+    void* newdst = dst - 0x10; // to compensate the immediate offset
+    asm volatile(
+        "ldr x1, [%0]\n\t"  // newdst address into x13
+        "ldr q1, [%1]\n\t"  // load the data into the register
+        "stur q1, [x1, #0x10]"  // the instruction actually being tested
+        : : "r"(&newdst), "r"(src) : "x1", "q1");
+} 
+
+// 3c80c020
+void stur13(void* dst, void* src, int offset){
+    printf("128bit SIMD stur (0x3c80c020)\n");
+    void* newdst = dst - 0xc; // to compensate the immediate offset
+    asm volatile(
+        "ldr x1, [%0]\n\t"  // newdst address into x13
+        "ldr q0, [%1]\n\t"  // load the data into the register
+        "stur q0, [x1, #0xc]"  // the instruction actually being tested
+        : : "r"(&newdst), "r"(src) : "x1", "q0");
+}
+
+// 3c818025
+void stur14(void* dst, void* src, int offset){
+    printf("128bit SIMD stur (0x3c818025)\n");
+    void* newdst = dst - 0x18; // to compensate the immediate offset
+    asm volatile(
+        "ldr x1, [%0]\n\t"  // newdst address into x13
+        "ldr q5, [%1]\n\t"  // load the data into the register
+        "stur q5, [x1, #0x18]"  // the instruction actually being tested
+        : : "r"(&newdst), "r"(src) : "x1", "q5");
+}
+
+// 3c80c024
+void stur15(void* dst, void* src, int offset){
+    printf("128bit SIMD stur (0x3c80c024)\n");
+    void* newdst = dst - 0xc; // to compensate the immediate offset
+    asm volatile(
+        "ldr x1, [%0]\n\t"  // newdst address into x13
+        "ldr q4, [%1]\n\t"  // load the data into the register
+        "stur q4, [x1, #0xc]"  // the instruction actually being tested
+        : : "r"(&newdst), "r"(src) : "x1", "q4");
+}
+
+// 3c818026
+void stur16(void* dst, void* src, int offset){
+    printf("128bit SIMD stur (0x3c80c024)\n");
+    void* newdst = dst - 0x18; // to compensate the immediate offset
+    asm volatile(
+        "ldr x1, [%0]\n\t"  // newdst address into x13
+        "ldr q6, [%1]\n\t"  // load the data into the register
+        "stur q6, [x1, #0x18]"  // the instruction actually being tested
+        : : "r"(&newdst), "r"(src) : "x1", "q6");
+}
+
+// 3c820020
+void stur17(void* dst, void* src, int offset){
+    printf("128bit SIMD stur (0x3c820020)\n");
+    void* newdst = dst - 0x20; // to compensate the immediate offset
+    asm volatile(
+        "ldr x1, [%0]\n\t"  // newdst address into x13
+        "ldr q0, [%1]\n\t"  // load the data into the register
+        "stur q0, [x1, #0x20]"  // the instruction actually being tested
+        : : "r"(&newdst), "r"(src) : "x1", "q0");
+}
+
+// 3c830021
+void stur18(void* dst, void* src, int offset){
+    printf("128bit SIMD stur (0x3c830021)\n");
+    void* newdst = dst - 0x30; // to compensate the immediate offset
+    asm volatile(
+        "ldr x1, [%0]\n\t"  // newdst address into x13
+        "ldr q1, [%1]\n\t"  // load the data into the register
+        "stur q1, [x1, #0x30]"  // the instruction actually being tested
+        : : "r"(&newdst), "r"(src) : "x1", "q1");
 }
 
 // 3d8002e0
@@ -201,8 +377,8 @@ void str2(void* dst, void* src, int offset){
 // 3ca26861
 void str3(void* dst, void* src, int offset){
     printf("128bit SIMD str (0x3ca26861)\n");
-    uint64_t offs = 1;
-    void* newdst = dst - 0x1; // to compensate for the offset
+    int64_t offs = -2;
+    void* newdst = dst + 0x2; // to compensate for the offset
     asm volatile(
         "ldr x3, [%0]\n\t"  // newdst address into x13
         "ldr x2, [%2]\n\t"
@@ -246,8 +422,8 @@ void str5(void* dst, void* src, int offset){
 // f82468a2
 void str6(void* dst, void* src, int offset){
     printf("64bit str (0xf82468a2)\n");
-    uint64_t offs = 1;
-    void* newdst = dst - 0x1; // to compensate the immediate offset
+    int64_t offs = -2;
+    void* newdst = dst + 0x2; // to compensate the immediate offset
     asm volatile(
         "ldr x5, [%0]\n\t"  // newdst address into x13
         "ldr x4, [%2]\n\t"
@@ -260,19 +436,109 @@ void str6(void* dst, void* src, int offset){
         : : "r"(&newdst), "r"(src), "r"(&offs) : "x5", "x2", "x4");
 }
 
+// 3d800021
+void str7(void* dst, void* src, int offset){
+    printf("128bit SIMD str (0x3d800021)\n");
+    asm volatile(
+        "ldr x1, [%0]\n\t"  // newdst address into x13
+        "ldr q1, [%1]\n\t"  // load the data into the register
+        "str q1, [x1]"  // the instruction actually being tested
+        : : "r"(&dst), "r"(src) : "x1", "q1");
+}
+
+// 3d800022
+void str8(void* dst, void* src, int offset){
+    printf("128bit SIMD str (0x3d800022)\n");
+    asm volatile(
+        "ldr x1, [%0]\n\t"  // newdst address into x13
+        "ldr q2, [%1]\n\t"  // load the data into the register
+        "str q2, [x1]"  // the instruction actually being tested
+        : : "r"(&dst), "r"(src) : "x1", "q2");
+}
+
+// 3d800020
+void str9(void* dst, void* src, int offset){
+    printf("128bit SIMD str (0x3d800020)\n");
+    asm volatile(
+        "ldr x1, [%0]\n\t"  // newdst address into x13
+        "ldr q0, [%1]\n\t"  // load the data into the register
+        "str q0, [x1]"  // the instruction actually being tested
+        : : "r"(&dst), "r"(src) : "x1", "q0");
+}
+
+// 3d800024
+void str10(void* dst, void* src, int offset){
+    printf("128bit SIMD str (0x3d800024)\n");
+    asm volatile(
+        "ldr x1, [%0]\n\t"  // newdst address into x13
+        "ldr q4, [%1]\n\t"  // load the data into the register
+        "str q4, [x1]"  // the instruction actually being tested
+        : : "r"(&dst), "r"(src) : "x1", "q4");
+}
+
+// 3d800025
+void str11(void* dst, void* src, int offset){
+    printf("128bit SIMD str (0x3d800025)\n");
+    asm volatile(
+        "ldr x1, [%0]\n\t"  // newdst address into x13
+        "ldr q5, [%1]\n\t"  // load the data into the register
+        "str q5, [x1]"  // the instruction actually being tested
+        : : "r"(&dst), "r"(src) : "x1", "q5");
+}
+
+// f8226865
+void str12(void* dst, void* src, int offset){
+    printf("64bit str (0xf8226865)\n");
+    int64_t offs = -2;
+    void* newdst = dst + 0x2; // to compensate the immediate offset
+    asm volatile(
+        "ldr x3, [%0]\n\t"  // newdst address into x13
+        "ldr x2, [%2]\n\t"
+        "ldr x5, [%1]\n\t"  // load the data into the register
+        "str x5, [x3, x2]\n\t"  // the instruction actually being tested
+
+        "ldr x5, [%1, #0x08]\n\t"  // load the second half
+        "add x3, x3, #0x08\n\t"    // new dst address
+        "str x5, [x3, x2]\n\t"  // the instruction actually being tested
+        : : "r"(&newdst), "r"(src), "r"(&offs) : "x5", "x2", "x3");
+}
+
 void runAsmTests(void* addr){
 
-    runInstrCheck(strSIMD128unsignedImm, addr, 0);
-    runInstrCheck(stp1,addr,0);
-    runInstrCheck(stp2,addr,0);
-    runInstrCheck(stp3,addr,0);
-    runInstrCheck(stur1,addr,0);
-    runInstrCheck(stur2,addr,0);
-    runInstrCheck(str1,addr,0);
-    runInstrCheck(str2,addr,0);
-    runInstrCheck(str3,addr,0);
-    runInstrCheck(str4,addr,0);
-    runInstrCheck(str5,addr,0);
-    runInstrCheck(str6,addr,0);
+    runInstrCheck(strSIMD128unsignedImm, addr, 0, 16);
+    runInstrCheck(stp1,addr,0, 16);
+    runInstrCheck(stp2,addr,0, 16);
+    runInstrCheck(stp3,addr,0, 16);
+    runInstrCheck(stp4,addr,0, 32);
+    runInstrCheck(stur1,addr,0, 16);
+    runInstrCheck(stur2,addr,0, 16);
+    runInstrCheck(stur3,addr,0, 16);
+    runInstrCheck(stur4,addr,0, 16);
+    runInstrCheck(stur5,addr,0, 16);
+    runInstrCheck(stur6,addr,0, 16);
+    runInstrCheck(stur7,addr,0, 16);
+    runInstrCheck(stur8,addr,0, 16);
+    runInstrCheck(stur9,addr,0, 16);
+    runInstrCheck(stur10,addr,0, 16);
+    runInstrCheck(stur11,addr,0, 16);
+    runInstrCheck(stur12,addr,0, 16);
+    runInstrCheck(stur13,addr,0, 16);
+    runInstrCheck(stur14,addr,0, 16);
+    runInstrCheck(stur15,addr,0, 16);
+    runInstrCheck(stur16,addr,0, 16);
+    runInstrCheck(stur17,addr,0, 16);
+    runInstrCheck(stur18,addr,0, 16);
+    runInstrCheck(str1,addr,0, 16);
+    runInstrCheck(str2,addr,0, 16);
+    runInstrCheck(str3,addr,0, 16);
+    runInstrCheck(str4,addr,0, 16);
+    runInstrCheck(str5,addr,0, 16);
+    runInstrCheck(str6,addr,0, 16);
+    runInstrCheck(str7,addr,0, 16);
+    runInstrCheck(str8,addr,0, 16);
+    runInstrCheck(str9,addr,0, 16);
+    runInstrCheck(str10,addr,0, 16);
+    runInstrCheck(str11,addr,0, 16);
+    runInstrCheck(str12,addr,0, 16);
 
 }

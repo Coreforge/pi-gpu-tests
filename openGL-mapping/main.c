@@ -242,6 +242,9 @@ int main(){
 
 
     runAsmTests(buf + 512);
+    printf("\n\nSecond run: \n");
+
+    runAsmTests(buf + 256);
 
 
 
