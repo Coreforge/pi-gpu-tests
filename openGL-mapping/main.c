@@ -5,6 +5,8 @@
 #include <string.h>
 #include <GL/gl.h>
 
+#include "arm64-asmtests.h"
+
 #define ALIGN_MEMCPY 0
 #define ALIGN_MEMCPY_SIZE 4
 #define MEMCPY_64BIT 1
@@ -40,6 +42,7 @@ const char* frg_Shader =
 void* this_memcpy(void* dst, const void* src, size_t n){
 	volatile char* vc_src = (char*)src;
 	volatile char* vc_dst = (char*)dst;
+    printf("Copying 0x%llx bytes from 0x%llx to 0x%llx\n",n, src, dst);
 
 	// copy byte by byte, hopefully avoiding any alignment issues
 	size_t pos = 0;
@@ -224,14 +227,21 @@ int main(){
     memset(tmp,128,1280*720*2);
     //glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,1280,720,0,GL_RGBA,GL_UNSIGNED_BYTE,NULL);
     i = glGetError();
+    printf("err: %d\n",i);
     //glBindTexture(GL_TEXTURE_BUFFER,tex);
     i = glGetError();
+    printf("err: %d\n",i);
     glBufferData(GL_PIXEL_UNPACK_BUFFER,1280*720*4,NULL,GL_STATIC_DRAW);
-    glBufferStorage(GL_PIXEL_UNPACK_BUFFER,1280*720*4,NULL,GL_DYNAMIC_STORAGE_BIT | GL_MAP_WRITE_BIT | GL_MAP_READ_BIT | GL_MAP_PERSISTENT_BIT);
+    glBufferStorage(GL_PIXEL_UNPACK_BUFFER,1280*720*4,NULL,GL_DYNAMIC_STORAGE_BIT | GL_MAP_WRITE_BIT | GL_MAP_READ_BIT | GL_MAP_COHERENT_BIT | GL_MAP_PERSISTENT_BIT);
     //glTexBuffer(GL_PIXEL_UNPACK_BUFFER,GL_RGBA,texBuffer);
     i = glGetError();
-    void* buf = glMapBufferRange(GL_PIXEL_UNPACK_BUFFER,0,1280*720*4, GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_FLUSH_EXPLICIT_BIT);
+    printf("err: %d\n",i);
+    void* buf = glMapBufferRange(GL_PIXEL_UNPACK_BUFFER,0,1280*720*4, GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT);//| GL_MAP_FLUSH_EXPLICIT_BIT);
     i = glGetError();
+    printf("err: %d\n",i);
+
+
+    runAsmTests(buf + 512);
 
 
 
@@ -248,10 +258,11 @@ int main(){
 #if READ_TEST==1
     // read back the buffer into the tmp buffer
     printf("Mapping buffer for reading\n");
-    buf = glMapBufferRange(GL_PIXEL_UNPACK_BUFFER,0,1280*720*4, GL_MAP_READ_BIT | GL_MAP_PERSISTENT_BIT);
+    buf = glMapBufferRange(GL_PIXEL_UNPACK_BUFFER,0,1280*720*4, GL_MAP_READ_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT);
     i = glGetError();
     glMemoryBarrier(GL_CLIENT_MAPPED_BUFFER_BARRIER_BIT);
     i = glGetError();
+    printf("Buffer address: %lx\n", buf);
     this_memcpy(tmp+1,buf+1,1280*720*4-1);
     glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
     printf("Read back data, writing it again\n");
