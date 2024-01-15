@@ -50,10 +50,11 @@ bool runInstrCheck(str16 strfun, void* addr, int imm_offset, int dataSize){
     int offs = 3;
     int blkSize = 256;
     // some test data that makes it easy to spot errors
-    char* srcData = malloc(dataSize);
+    char* srcData = malloc(dataSize*2);
 
     bool success = true;
 
+    memset(srcData, 0x55, dataSize*2);
     for(int i = 0; i < dataSize; i++){
         srcData[i]=i+1;
     }
@@ -88,6 +89,62 @@ bool runInstrCheck(str16 strfun, void* addr, int imm_offset, int dataSize){
         success = false;
     }
 
+    free(srcData);
+    // all checks are done
+    return success;
+}
+
+
+bool runLdrInstrCheck(str16 strfun, void* addr, int imm_offset, int dataSize){
+
+    int offs = 3;
+    int blkSize = 256;
+    // some test data that makes it easy to spot errors
+    char* dst = malloc(dataSize*4);
+
+    char* srcData = addr + offs;
+
+    bool success = true;
+
+    // to check that only what should be touched gets touched
+    memset(addr, 0xff,blkSize);
+    memset(dst, 0xaa,dataSize*4);
+    for(int i = 0; i < dataSize; i++){
+        srcData[i]=i+1;
+    }
+
+
+    strfun(dst, srcData, imm_offset);  // +3 to have it not aligned, +1 would work just as well, but this gives more space to spot overruns
+
+    if(safe_memcmp(dst, srcData, dataSize)){
+        printf("Data mismatch!\n");
+        printf("Source: \t");
+        dump(srcData, dataSize);
+        printf("\nDest: \t");
+        dump(dst, dataSize);
+        printf("\n");
+        success = false;
+    }
+
+    // overruns don't make too much sense for this
+    /*
+    // the data has been copied correctly, but there could still be overruns
+    if(memcheck(addr, 0xff, offs + imm_offset)){
+        printf("Overrun in front of the actual address! Data is: \n");
+        dump(addr, offs);
+        printf("\n(should all be 0x%hhx)\n", 0xff);
+        success = false;
+    }
+
+    if(memcheck(addr+offs + dataSize + imm_offset, 0xff, blkSize - offs - dataSize - imm_offset)){
+        printf("Overrun in after the actual range! Data is: \n");
+        dump(addr + dataSize + offs, offs);
+        printf("\n(should all be 0x%hhx)\n", 0xff);
+        success = false;
+    }   
+    */
+
+    free(dst);
     // all checks are done
     return success;
 }
@@ -110,6 +167,82 @@ void strSIMD128unsignedImm(void* dst, void* src, int offset){
  * quite right, it could also be something that only happens with certain offsets, so I want to check all
  * instructions I've seen get fixed up
 */
+
+// https://devblogs.microsoft.com/oldnewthing/20220726-00/?p=106898 may help with reg sizes (since I don't know aarch64 asm very much)
+
+
+void ldrBehaviour1(void* dst, void* src, int offset){
+    printf("64bit SIMD ldr (0xfd400021) behaviour test (data should be 1 2 3 4 5 6 7 8 0 0 0 0 0 0 0 0)\n");
+    asm volatile(
+        "ldr x1, [%1]\n\t"  // src
+        "ldr q1, [x1]\n\t"
+        "ldr d1, [x1]\n\t"
+        "str q1, [%0]\n\t"
+        : : "r"(dst), "r"(&src) : "x1", "q1", "d1");
+}
+
+void ldrBehaviour2(void* dst, void* src, int offset){
+    printf("32bit ldr behaviour test (data should show 1 2 3 4 0 0 0 0 aa aa aa aa aa aa aa aa)\n");
+    asm volatile(
+        "ldr x1, [%1]\n\t"  // src
+        "ldr x2, [x1]\n\t"
+        "ldr w2, [x1]\n\t"
+        "str x2, [%0]\n\t"
+        : : "r"(dst), "r"(&src) : "x1", "x2", "w2");
+}
+
+// 0xf840816a
+void ldur1(void* dst, void* src, int offset){
+    printf("64bit ldur (0xf840816a)\n");
+    void* newsrc = src - 0x8; // to compensate the immediate offset
+    asm volatile(
+        "ldr x11, [%1]\n\t"  // src
+        "ldur x10, [x11, #8]\n\t"
+        "str x10, [%0]\n\t"
+        : : "r"(dst), "r"(&newsrc) : "x11", "x10");
+}
+
+// 0xfc408021
+void ldur2(void* dst, void* src, int offset){
+    printf("64bit SIMD ldur (0xfc408021)\n");
+    void* newsrc = src - 0x8; // to compensate the immediate offset
+    asm volatile(
+        "ldr x1, [%1]\n\t"  // src
+        "ldur d1, [x1, #8]\n\t"
+        "str d1, [%0]\n\t"
+        : : "r"(dst), "r"(&newsrc) : "x1", "d1");
+}
+
+// f85f816a
+void ldur3(void* dst, void* src, int offset){
+    printf("64bit ldur (0xf85f816a)\n");
+    void* newsrc = src + 0x8; // to compensate the immediate offset
+    asm volatile(
+        "ldr x11, [%1]\n\t"  // src
+        "ldur x10, [x11, #-8]\n\t"
+        "str x10, [%0]\n\t"
+        : : "r"(dst), "r"(&newsrc) : "x11", "x10");
+}
+
+// 0xfd400021
+void ldr1(void* dst, void* src, int offset){
+    printf("64bit SIMD ldr (0xfd400021)\n");
+    asm volatile(
+        "ldr x1, [%1]\n\t"  // src
+        "ldr d1, [x1]\n\t"
+        "str d1, [%0]\n\t"
+        : : "r"(dst), "r"(&src) : "x1", "d1");
+}
+
+// f940016a
+void ldr2(void* dst, void* src, int offset){
+    printf("64bit ldr (0xf940016a)\n");
+    asm volatile(
+        "ldr x11, [%1]\n\t"  // src
+        "ldr x10, [x11]\n\t"
+        "str x10, [%0]\n\t"
+        : : "r"(dst), "r"(&src) : "x10", "x11");
+}
 
 // a9000c22
 void stp1(void* dst, void* src, int offset){
@@ -349,6 +482,39 @@ void stur18(void* dst, void* src, int offset){
         : : "r"(&newdst), "r"(src) : "x1", "q1");
 }
 
+// f81f81aa
+void stur19(void* dst, void* src, int offset){
+    printf("64bit stur (0xf81f81aa)\n");
+    void* newdst = dst + 0x8; // to compensate the immediate offset
+    asm volatile(
+        "ldr x13, [%0]\n\t"  // newdst address into x13
+        "ldr x10, [%1]\n\t"  // load the data into the register
+        "stur x10, [x13, #-8]"  // the instruction actually being tested
+        : : "r"(&newdst), "r"(src) : "x10", "x13");
+}
+
+// fc0081a1
+void stur20(void* dst, void* src, int offset){
+    printf("64bit SIMD stur (0xfc0081a1)\n");
+    void* newdst = dst - 0x8; // to compensate the immediate offset
+    asm volatile(
+        "ldr x13, [%0]\n\t"  // newdst address into x13
+        "ldr d1, [%1]\n\t"  // load the data into the register
+        "stur d1, [x13, #8]"  // the instruction actually being tested
+        : : "r"(&newdst), "r"(src) : "d1", "x13");
+}
+
+// 3c9c01a0
+void stur21(void* dst, void* src, int offset){
+    printf("128bit SIMD stur (0x3c9c01a0)\n");
+    void* newdst = dst + 0x40; // to compensate the immediate offset
+    asm volatile(
+        "ldr x13, [%0]\n\t"  // newdst address into x13
+        "ldr q0, [%1]\n\t"  // load the data into the register
+        "stur q0, [x13, #-0x40]"  // the instruction actually being tested
+        : : "r"(&newdst), "r"(src) : "x13", "q0");
+}
+
 // 3d8002e0
 void str1(void* dst, void* src, int offset){
     printf("128bit SIMD str (0x3d8002e0)\n");
@@ -503,8 +669,18 @@ void str12(void* dst, void* src, int offset){
         : : "r"(&newdst), "r"(src), "r"(&offs) : "x5", "x2", "x3");
 }
 
-void runAsmTests(void* addr){
+// fd0001a1
+void str13(void* dst, void* src, int offset){
+    printf("64bit SIMD str (0xfd0001a1)\n");
+    asm volatile(
+        "ldr x13, [%0]\n\t"  // newdst address into x13
+        "ldr d1, [%1]\n\t"  // load the data into the register
+        "str d1, [x13]"  // the instruction actually being tested
+        : : "r"(&dst), "r"(src) : "x13", "d1");
+}
 
+void runAsmTests(void* addr){
+    printf("\nstore instructions: \n");
     runInstrCheck(strSIMD128unsignedImm, addr, 0, 16);
     runInstrCheck(stp1,addr,0, 16);
     runInstrCheck(stp2,addr,0, 16);
@@ -528,6 +704,9 @@ void runAsmTests(void* addr){
     runInstrCheck(stur16,addr,0, 16);
     runInstrCheck(stur17,addr,0, 16);
     runInstrCheck(stur18,addr,0, 16);
+    runInstrCheck(stur19,addr,0, 8);
+    runInstrCheck(stur20,addr,0, 8);
+    runInstrCheck(stur21,addr,0, 16);
     runInstrCheck(str1,addr,0, 16);
     runInstrCheck(str2,addr,0, 16);
     runInstrCheck(str3,addr,0, 16);
@@ -540,5 +719,17 @@ void runAsmTests(void* addr){
     runInstrCheck(str10,addr,0, 16);
     runInstrCheck(str11,addr,0, 16);
     runInstrCheck(str12,addr,0, 16);
+    runInstrCheck(str13,addr,0, 8);
+
+    printf("\nload instructions:\n");
+    runLdrInstrCheck(ldur1,addr,0, 8);
+    runLdrInstrCheck(ldur2,addr,0, 8);
+    runLdrInstrCheck(ldur3,addr,0, 8);
+    runLdrInstrCheck(ldr1,addr,0, 8);
+    runLdrInstrCheck(ldr2,addr,0, 8);
+
+    runLdrInstrCheck(ldrBehaviour1,addr,0, 16);
+    runLdrInstrCheck(ldrBehaviour2,addr,0, 16);
+
 
 }
